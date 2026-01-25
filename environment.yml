@@ -1,0 +1,8 @@
+name: ML
+channels:
+  - defaults
+  - conda-forge
+dependencies:
+  - openssl
+  - certifi
+prefix: /opt/homebrew/Caskroom/mambaforge/base/envs/ML
