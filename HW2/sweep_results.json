@@ -1,0 +1,145 @@
+[
+    {
+        "config": {
+            "model_kwargs": {
+                "emb_dim": 32,
+                "hidden_dim": 256,
+                "num_layers": 2,
+                "dropout": 0.1
+            },
+            "lr": 0.001,
+            "epochs": 2
+        },
+        "test_nll": 0.12700087558979892
+    },
+    {
+        "config": {
+            "model_kwargs": {
+                "emb_dim": 32,
+                "hidden_dim": 256,
+                "num_layers": 4,
+                "dropout": 0.2
+            },
+            "lr": 0.001,
+            "epochs": 5
+        },
+        "test_nll": 0.09747944919819734
+    },
+    {
+        "config": {
+            "model_kwargs": {
+                "emb_dim": 32,
+                "hidden_dim": 256,
+                "num_layers": 2,
+                "dropout": 0.1
+            },
+            "lr": 0.01,
+            "epochs": 2
+        },
+        "test_nll": 0.1226998200708506
+    },
+    {
+        "config": {
+            "model_kwargs": {
+                "emb_dim": 128,
+                "hidden_dim": 256,
+                "num_layers": 2,
+                "dropout": 0.1
+            },
+            "lr": 0.001,
+            "epochs": 3
+        },
+        "test_nll": 0.11166798829059212
+    },
+    {
+        "config": {
+            "model_kwargs": {
+                "emb_dim": 16,
+                "hidden_dim": 128,
+                "num_layers": 2,
+                "dropout": 0.0
+            },
+            "lr": 0.001,
+            "epochs": 2
+        },
+        "test_nll": 0.14789979005151865
+    },
+    {
+        "config": {
+            "model_kwargs": {
+                "emb_dim": 64,
+                "hidden_dim": 256,
+                "num_layers": 2,
+                "dropout": 0.1
+            },
+            "lr": 0.001,
+            "epochs": 10
+        },
+        "test_nll": 0.08616043059679927
+    },
+    {
+        "config": {
+            "model_kwargs": {
+                "emb_dim": 64,
+                "hidden_dim": 512,
+                "num_layers": 3,
+                "dropout": 0.2
+            },
+            "lr": 0.0005,
+            "epochs": 5
+        },
+        "test_nll": 0.09258427362247389
+    },
+    {
+        "config": {
+            "model_kwargs": {
+                "emb_dim": 256,
+                "hidden_dim": 128,
+                "num_layers": 2,
+                "dropout": 0.1
+            },
+            "lr": 0.001,
+            "epochs": 3
+        },
+        "test_nll": 0.12053207124982561
+    },
+    {
+        "config": {
+            "model_kwargs": {
+                "emb_dim": 64,
+                "hidden_dim": 256,
+                "num_layers": 2,
+                "dropout": 0.0
+            },
+            "lr": 0.001,
+            "epochs": 15
+        },
+        "test_nll": 0.08114434526404556
+    },
+    {
+        "config": {
+            "model_kwargs": {
+                "emb_dim": 32,
+                "hidden_dim": 256,
+                "num_layers": 2,
+                "dropout": 0.1
+            },
+            "lr": 0.0001,
+            "epochs": 5
+        },
+        "test_nll": 0.13485029352927694
+    },
+    {
+        "config": {
+            "model_kwargs": {
+                "emb_dim": 4,
+                "hidden_dim": 512,
+                "num_layers": 2,
+                "dropout": 0.1
+            },
+            "lr": 0.001,
+            "epochs": 4
+        },
+        "test_nll": 0.10619065176516163
+    }
+]

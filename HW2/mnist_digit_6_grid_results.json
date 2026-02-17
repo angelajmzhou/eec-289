@@ -1,0 +1,114 @@
+[
+    {
+        "digit": 6,
+        "window": 7,
+        "eps": 0.1,
+        "score": 0.10106251544353842,
+        "image_path": "mnist_d6_w7_eps0.1.png"
+    },
+    {
+        "digit": 6,
+        "window": 7,
+        "eps": 0.05,
+        "score": 0.10847541388682976,
+        "image_path": "mnist_d6_w7_eps0.05.png"
+    },
+    {
+        "digit": 6,
+        "window": 7,
+        "eps": 0.02,
+        "score": 0.19767729182110205,
+        "image_path": "mnist_d6_w7_eps0.02.png"
+    },
+    {
+        "digit": 6,
+        "window": 7,
+        "eps": 0.01,
+        "score": 0.2092908327155918,
+        "image_path": "mnist_d6_w7_eps0.01.png"
+    },
+    {
+        "digit": 6,
+        "window": 9,
+        "eps": 0.01,
+        "score": 0.6562889165628891,
+        "image_path": "mnist_d6_w9_eps0.01.png"
+    },
+    {
+        "digit": 6,
+        "window": 9,
+        "eps": 0.02,
+        "score": 0.7322540473225405,
+        "image_path": "mnist_d6_w9_eps0.02.png"
+    },
+    {
+        "digit": 6,
+        "window": 9,
+        "eps": 0.05,
+        "score": 0.9768368617683686,
+        "image_path": "mnist_d6_w9_eps0.05.png"
+    },
+    {
+        "digit": 6,
+        "window": 9,
+        "eps": 0.1,
+        "score": 1.0866749688667496,
+        "image_path": "mnist_d6_w9_eps0.1.png"
+    },
+    {
+        "digit": 6,
+        "window": 11,
+        "eps": 0.05,
+        "score": 1.850314465408805,
+        "image_path": "mnist_d6_w11_eps0.05.png"
+    },
+    {
+        "digit": 6,
+        "window": 11,
+        "eps": 0.01,
+        "score": 1.9811320754716981,
+        "image_path": "mnist_d6_w11_eps0.01.png"
+    },
+    {
+        "digit": 6,
+        "window": 11,
+        "eps": 0.1,
+        "score": 2.009308176100629,
+        "image_path": "mnist_d6_w11_eps0.1.png"
+    },
+    {
+        "digit": 6,
+        "window": 11,
+        "eps": 0.02,
+        "score": 2.169056603773585,
+        "image_path": "mnist_d6_w11_eps0.02.png"
+    },
+    {
+        "digit": 6,
+        "window": 13,
+        "eps": 0.02,
+        "score": 3.8739495798319328,
+        "image_path": "mnist_d6_w13_eps0.02.png"
+    },
+    {
+        "digit": 6,
+        "window": 13,
+        "eps": 0.01,
+        "score": 4.1026228673287495,
+        "image_path": "mnist_d6_w13_eps0.01.png"
+    },
+    {
+        "digit": 6,
+        "window": 13,
+        "eps": 0.05,
+        "score": 4.527119938884645,
+        "image_path": "mnist_d6_w13_eps0.05.png"
+    },
+    {
+        "digit": 6,
+        "window": 13,
+        "eps": 0.1,
+        "score": 5.4059078176725235,
+        "image_path": "mnist_d6_w13_eps0.1.png"
+    }
+]
