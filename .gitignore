@@ -1,2 +1,6 @@
 *.pkl
 data/*
+Final-Proj/extracted_audio/
+Final-Proj/generated_audio/
+
+*.zip
