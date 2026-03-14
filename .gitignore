@@ -7,3 +7,4 @@ Final-Proj/.ipynb_checkpoints/
 *.pdf
 *.zip
 HW3/misc/
+**/__pycache__/
