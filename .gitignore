@@ -2,5 +2,8 @@
 data/*
 Final-Proj/extracted_audio/
 Final-Proj/generated_audio/
-
+Final-Proj/librispeech_data/
+Final-Proj/.ipynb_checkpoints/
+*.pdf
 *.zip
+HW3/misc/
