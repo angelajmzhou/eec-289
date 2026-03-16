@@ -43,43 +43,8 @@ device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 # Utilities
 # ---------------------------------------------------------------------------
 
-def set_seed(seed: int = 0) -> None:
-    """Set random seeds for reproducibility across Python, NumPy, and PyTorch."""
-    random.seed(seed)
-    np.random.seed(seed)
-    torch.manual_seed(seed)
-    if torch.cuda.is_available():
-        torch.cuda.manual_seed_all(seed)
 
 
-def choose_seed_patch_index(
-    patches: torch.Tensor,
-    seed_fg_min: int = 0,
-    seed_fg_max: int | None = None,
-) -> int:
-    """
-    Return a patch index to use as the synthesis seed.
-
-    Picks the highest-variance patch from ``patches[seed_fg_min:seed_fg_max]``,
-    which tends to be a perceptually salient (foreground) patch.
-
-    Args:
-        patches:     (N, C, F, W) source patch pool.
-        seed_fg_min: exclude patches before this index (silence / fade-in).
-        seed_fg_max: exclude patches at or after this index.  Defaults to N
-                     (search the whole pool from seed_fg_min).  Pass an
-                     utterance's end patch-index to scope the seed search to
-                     a specific utterance so each synthesis run starts from a
-                     different region of the corpus.
-    """
-    N = patches.shape[0]
-    lo = min(seed_fg_min, N - 1)
-    hi = N if seed_fg_max is None else min(int(seed_fg_max), N)
-    hi = max(lo + 1, hi)                              # ensure at least one candidate
-    candidates = patches[lo:hi]                       # (M, C, F, W)
-    energy = candidates.var(dim=(-1, -2, -3))         # (M,) — variance per patch
-    best_local = energy.argmax().item()
-    return best_local + lo
 
 
 def choose_frontier_frame(
