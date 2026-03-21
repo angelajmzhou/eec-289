@@ -1,44 +1,4 @@
-"""
-speech_synth.py
-===============
-Reusable functions for building a LibriSpeech patch corpus and running the
-three-pillar non-parametric speech synthesis pipeline.
-
-Public API
-----------
-load_speech_corpus   – download / read raw LibriSpeech waveforms
-build_corpus_state   – extract MFCC patches → ZCA → K-means → SMT basis
-synthesize_speech    – run three-pillar synthesis from a pre-built corpus state
-
-Typical usage
--------------
-    # 1. Load raw audio once (slow: disk I/O + resampling)
-    corpus = load_speech_corpus(data_dir, n_utterances=30, target_sr=16_000)
-
-    # 2. Build corpus state for a given (patch_ms, hop_ms) config (slow: ZCA + K-means)
-    state = build_corpus_state(corpus, target_sr=16_000, patch_ms=25.0, hop_ms=10.0)
-
-    # 3. Synthesize many times with different hyperparams (fast: reuses state)
-    audio = synthesize_speech(state, out_steps=500, eps=0.10, r_loc=1.0)
-    audio = synthesize_speech(state, out_steps=500, eps=0.20, r_loc=1.0, h_mult=0.3)
-
-This split makes hyperparameter grid searches 10–100× faster because the
-expensive corpus-building step runs only once per (patch_ms, hop_ms) config.
-
-IMPORTANT — why MFCC is computed on the *concatenated* audio
-------------------------------------------------------------
-Patch stitching maps ``patch_idx * hop_length`` to a sample position in the
-source waveform.  This is only correct when every patch's index matches its
-position in a single contiguous array.  If MFCC is computed per-utterance and
-patches are concatenated afterwards, patch 300 from utterance 3 has local frame
-index 300 but points to the wrong sample in the combined audio — producing
-random fragments and incomprehensible output.
-
-Solution: concatenate all utterances (with a ``win_length``-sample silence gap
-between them to avoid FFT smear at boundaries), compute one MFCC on the full
-array, then extract patches from that.  ``patch_idx * hop_length`` then gives
-the exact correct sample offset in ``corpus_state['corpus_audio_cat']``.
-"""
+"""LibriSpeech helpers: load audio, build one MFCC corpus per (patch_ms, hop_ms), synthesize."""
 
 from __future__ import annotations
 
@@ -60,29 +20,13 @@ from audio_extract import (
 )
 
 
-# ──────────────────────────────────────────────────────────────────────────────
-# 1. Load raw audio
-# ──────────────────────────────────────────────────────────────────────────────
-
 def load_speech_corpus(
     data_dir: str | Path,
     n_utterances: int = 30,
     target_sr: int = 16_000,
     seed: int = 0,
 ) -> list[np.ndarray]:
-    """
-    Load *n_utterances* random utterances from LibriSpeech dev-clean.
-    Downloads the dataset (~340 MB) on first call.
-
-    Args:
-        data_dir:     Root directory for LibriSpeech data.
-        n_utterances: Number of utterances to sample.
-        target_sr:    Target sample rate (Hz); all audio is resampled here.
-        seed:         Random seed for utterance selection.
-
-    Returns:
-        List of float32 mono numpy waveforms, each at *target_sr*.
-    """
+    """Random LibriSpeech dev-clean utterances as float32 mono at target_sr."""
     import torchaudio
 
     rng = random.Random(seed)
@@ -112,12 +56,8 @@ def load_speech_corpus(
     return audio_list
 
 
-# ──────────────────────────────────────────────────────────────────────────────
-# 2. Build corpus state (patches + SMT basis)
-# ──────────────────────────────────────────────────────────────────────────────
-
 def build_corpus_state(
-    raw_audio_list: list[np.ndarray],
+    raw_audio_list: "list[np.ndarray] | np.ndarray",
     target_sr: int = 16_000,
     n_mfcc: int = 40,
     patch_ms: float = 25.0,
@@ -127,55 +67,17 @@ def build_corpus_state(
     smt_embed_dim: int = 128,
     device: str | None = None,
 ) -> dict[str, Any]:
-    """
-    Build the MFCC patch corpus and SMT basis from raw audio waveforms.
+    """One MFCC on concatenated audio, patches, ZCA, k-means, SMT basis; reuse per (patch_ms, hop_ms)."""
+    if isinstance(raw_audio_list, np.ndarray):
+        raw_audio_list = [raw_audio_list]
 
-    Call once per ``(patch_ms, hop_ms)`` configuration.  The returned
-    ``corpus_state`` dict is passed directly to :func:`synthesize_speech` and
-    can be reused cheaply across many synthesis runs that vary only *eps*,
-    *r_loc*, or *h_mult*.
-
-    Args:
-        raw_audio_list: List of float32 mono waveforms (from
-                        :func:`load_speech_corpus`).
-        target_sr:      Sample rate of all waveforms (Hz).
-        n_mfcc:         Number of MFCC coefficients per frame.
-        patch_ms:       Patch width in milliseconds.
-        hop_ms:         MFCC frame hop in milliseconds.
-        win_ms:         MFCC analysis window in milliseconds.
-        smt_dict_size:  K-means dictionary size (K).
-        smt_embed_dim:  SMT spectral embedding dimension (d).
-        device:         PyTorch device; defaults to CUDA if available.
-
-    Returns:
-        ``corpus_state`` dict with keys:
-
-        - ``patches_tensor``  : (N, 1, n_mfcc, W_t) ``torch.Tensor`` on *device*
-        - ``smt_basis``       : (flat_dim, d) ``torch.Tensor`` on *device*
-        - ``corpus_audio_cat``: contiguous waveform; ``patch_idx * hop_length`` gives the correct sample offset
-        - ``hop_length``      : int — samples per MFCC frame
-        - ``W_t``            : int — frames per patch
-        - ``target_sr``      : int
-        - ``n_mfcc``         : int
-        - ``utt_bounds``     : list of ``(start, end)`` patch-index pairs
-    """
     if device is None:
         device = "cuda" if torch.cuda.is_available() else "cpu"
 
     hop_length = max(1, int(round(target_sr * hop_ms / 1000)))
     win_length = max(1, int(round(target_sr * win_ms / 1000)))
-    # n_fft must be large enough to support n_mfcc mel bins regardless of how
-    # short win_ms is (e.g. 2 ms → 32 samples, which is far too small).
     n_fft = max(win_length, hop_length * 4, 256)
 
-    # ── Step 1: Concatenate all utterances into one waveform ──────────────────
-    # IMPORTANT: We must compute a SINGLE MFCC on the full concatenated signal.
-    # The stitch reconstruction formula is:
-    #   start_sample = (patch_idx + frame_in_patch) * hop_length
-    # This is only correct when patch_idx == MFCC frame index, which holds only
-    # when the patches were extracted from one contiguous MFCC.  If we compute
-    # per-utterance MFCCs and concatenate patches, patch_idx no longer maps to
-    # the right sample position in corpus_audio_cat.
     silence_gap     = np.zeros(win_length, dtype=np.float32)
     audio_segs      = []
     utt_sample_starts: list[int] = []
@@ -188,7 +90,6 @@ def build_corpus_state(
 
     corpus_audio_cat = np.concatenate(audio_segs)
 
-    # ── Step 2: One MFCC on the full signal ───────────────────────────────────
     mfcc_full = librosa.feature.mfcc(
         y=corpus_audio_cat,
         sr=target_sr,
@@ -203,7 +104,7 @@ def build_corpus_state(
         hop_length=hop_length,
         patch_ms=patch_ms,
         patch_hop_frames=1,
-    ).astype(np.float32)  # (N, n_mfcc, W_t)
+    ).astype(np.float32)
 
     if all_patches.shape[0] < 2:
         raise RuntimeError(
@@ -218,8 +119,6 @@ def build_corpus_state(
 
     print(f"  {N:,} patches  (W_t={W_t}, flat_dim={flat_dim})")
 
-    # ── Step 3: Compute utt_bounds in patch-index space ───────────────────────
-    # Disables the SMT slowness penalty across utterance boundaries.
     utt_bounds: list[tuple[int, int]] = []
     for audio_np, s_start in zip(raw_audio_list, utt_sample_starts):
         frame_start = s_start // hop_length
@@ -231,31 +130,28 @@ def build_corpus_state(
     if not utt_bounds:
         utt_bounds = [(0, N)]
 
-    # ── Step 4: ZCA whitening ─────────────────────────────────────────────────
     norm_patches, _mean, _zca = preprocess_patches(patches_flat)
 
-    # ── Step 5: K-means dictionary ────────────────────────────────────────────
     n_clusters = min(smt_dict_size, max(1, N // 4))
     kmeans     = apply_kmeans_to_patches(norm_patches, n_clusters=n_clusters,
                                          sample_size=None)
 
-    # ── Step 6: Spectral decomp (respects utterance boundaries) ───────────────
     eigvals, eigvecs = spectral_decomp(kmeans.labels_, utt_bounds, n_clusters)
     d        = min(smt_embed_dim, eigvecs.shape[1] - 1)
-    P        = eigvecs[:, 1:d + 1].T                               # (d, K)
+    P        = eigvecs[:, 1:d + 1].T
     cc       = sk_normalize(kmeans.cluster_centers_, axis=1, norm='l2')
-    basis_np = sk_normalize(cc.T @ P.T, axis=0, norm='l2')         # (flat_dim, d)
+    basis_np = sk_normalize(cc.T @ P.T, axis=0, norm='l2')
 
     smt_basis      = torch.tensor(basis_np,    dtype=torch.float32, device=device)
     patches_tensor = (torch.tensor(all_patches, dtype=torch.float32, device=device)
-                      .unsqueeze(1))   # (N, 1, n_mfcc, W_t)
+                      .unsqueeze(1))
 
     print(f"  SMT basis: {tuple(smt_basis.shape)}")
 
     return {
         "patches_tensor":  patches_tensor,
         "smt_basis":       smt_basis,
-        "corpus_audio_cat": corpus_audio_cat,  # contiguous; patch_idx*hop == sample offset
+        "corpus_audio_cat": corpus_audio_cat,
         "hop_length":      hop_length,
         "W_t":             W_t,
         "target_sr":       target_sr,
@@ -263,60 +159,55 @@ def build_corpus_state(
         "utt_bounds":      utt_bounds,
     }
 
-# ──────────────────────────────────────────────────────────────────────────────
-# 3. Synthesize speech (Updated for Dual-Epsilon & Stochastic Sampling)
-# ──────────────────────────────────────────────────────────────────────────────
-
 def synthesize_speech(
     corpus_state: dict[str, Any],
     out_steps: int = 500,
     r_loc: float = 1.0,
-    eps_ssd: float = 0.10,  # New: Pillar 1 gate
-    eps_smt: float = 0.40,  # New: Pillar 3 gate
-    h_mult: float = 0.3,    # Sampling temperature
-    weighted: bool = True,  # Use stochastic sampler
+    eps_ssd: float = 0.10,
+    eps_smt: float = 0.40,
+    h_mult: float = 0.3,
+    weighted: bool = False,
     seed: int = 0,
-) -> np.ndarray:
-    """
-    Synthesize speech using the Stochastic Three-Pillar sampler.
-
-    Args:
-        corpus_state: Dict from :func:`build_corpus_state`.
-        out_steps:    Number of MFCC frames to synthesize.
-        r_loc:        Locality radius (1.0 = global search).
-        eps_ssd:      Adaptive pool width for Pillar 1 (Texture matching).
-        eps_smt:      Adaptive pool width for Pillar 3 (Semantic matching).
-        h_mult:       Sampling temperature; matches sample_from_candidates logic.
-        weighted:     If True, uses distance-weighted softmax sampling.
-        seed:         Random seed for reproducibility.
-    """
+    seed_patch_bounds: "tuple[float, float] | None" = None,
+    return_history: bool = False,
+) -> "np.ndarray | tuple[np.ndarray, list[int]]":
+    """Three-pillar synthesis from corpus_state; optional L1 energy window for seed."""
     from Algos import synthesize_audio_mfcc, set_seed, reconstruct_audio
 
     set_seed(seed)
 
-    # ── Resolve seed patch start point ────────────────────────────────────────
-    utt_bounds = corpus_state.get("utt_bounds", [(0, corpus_state["patches_tensor"].shape[0])])
-    utt_idx    = seed % len(utt_bounds)
+    utt_bounds = corpus_state.get("utt_bounds",
+                                  [(0, corpus_state["patches_tensor"].shape[0])])
+    utt_idx          = seed % len(utt_bounds)
     seed_lo, seed_hi = utt_bounds[utt_idx]
 
-    # Note: Ensure your synthesize_audio_mfcc in Algos.py accepts eps_ssd/eps_smt
+    energy_lo: float | None = None
+    energy_hi: float | None = None
+    if seed_patch_bounds is not None:
+        energy_lo, energy_hi = float(seed_patch_bounds[0]), float(seed_patch_bounds[1])
+
     out_mfcc, history = synthesize_audio_mfcc(
-        patches        = corpus_state["patches_tensor"],
-        smt_basis      = corpus_state["smt_basis"],
-        out_time_steps = out_steps,
-        R_loc          = r_loc,
-        eps_ssd        = eps_ssd,   # Passed separately
-        eps_smt        = eps_smt,   # Passed separately
-        seed_fg_min    = seed_lo,
-        seed_fg_max    = seed_hi,
-        weighted       = weighted,
-        h_mult         = h_mult,
+        patches          = corpus_state["patches_tensor"],
+        smt_basis        = corpus_state["smt_basis"],
+        out_time_steps   = out_steps,
+        R_loc            = r_loc,
+        eps_ssd          = eps_ssd,
+        eps_smt          = eps_smt,
+        seed_fg_min      = seed_lo,
+        seed_fg_max      = seed_hi,
+        seed_energy_min  = energy_lo,
+        seed_energy_max  = energy_hi,
+        weighted         = weighted,
+        h_mult           = h_mult,
     )
 
-    return reconstruct_audio(
+    audio_out = reconstruct_audio(
         method         = "stitch",
         chosen_indices = history,
         source_audio   = corpus_state["corpus_audio_cat"],
         hop_length     = corpus_state["hop_length"],
         window_t       = corpus_state["W_t"],
     )
+    if return_history:
+        return audio_out, list(history)
+    return audio_out
